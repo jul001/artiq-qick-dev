@@ -56,8 +56,8 @@ class ARQICK_DoPulses_Red_CPMG_Mbi:
         self.setattr_argument("freq_resonant", NumberValue(300, precision=3, step=1))
         self.setattr_argument("freq_off_resonant", NumberValue(200, precision=3, step=1))
         self.setattr_argument('mw_gain', NumberValue(8000, precision=0, min=0, max=31000, step=1))
-        self.setattr_argument("a1_optical_pump", NumberValue(3 * us, precision=2, unit="us", step=1))
-        self.setattr_argument("ex_spin_readout", NumberValue(5 * us, precision=2, unit="us", step=1))
+        self.setattr_argument("a1_optical_pump", NumberValue(5 * us, precision=2, unit="us", step=1))
+        self.setattr_argument("ex_spin_readout", NumberValue(10 * us, precision=2, unit="us", step=1))
         self.setattr_argument("charge_readout", NumberValue(4 * us, precision=2, unit="us", step=1))
         self.setattr_argument("wait_time", NumberValue(500 * ns, precision=0, step=1, unit="ns"))
 
@@ -117,13 +117,23 @@ class ARQICK_DoPulses_Red_CPMG_Mbi:
 
         self.inherent_artiq_ttl2_to_ttl5_delay_ns = 1 * ns  # 140 ns works
         self.inherent_artiq_ttl2_to_ttl5_delay_mu = self.core.seconds_to_mu(self.inherent_artiq_ttl2_to_ttl5_delay_ns)
-        self.qick_adc_readout_to_pmod_out_delay_ns = 410 * ns
-        self.delay_after_ttl6_to_first_pmod_out_us = 1 * us  #1 * us
+        self.first_pmod_out_duration_ns = 300 * ns
+        self.delay_to_align_ttl5_to_readout_window_ns = 125 * ns
+        self.qick_adc_readout_to_pmod_out_delay_ns = 410 * ns     # 410 * ns
+        self.delay_after_ttl6_to_first_pmod_out_us = 1.34 * us  # 1 * us
         self.delay_after_ttl6_to_first_pmod_out_mu = self.core.seconds_to_mu(self.delay_after_ttl6_to_first_pmod_out_us)
         self.prep_nv_total_duration_us = self.read_to_red1 + self.green_init_duration + self.charge_readout + self.delay_after_prep_nv
-        self.after_first_pmod_out_to_ttl5_mu = self.core.seconds_to_mu(self.qick_adc_readout_to_pmod_out_delay_ns + self.prep_nv_total_duration_us)
-        self.first_pmod_out_duration_ns = 1 * ns
-        self.tot_time_after_pmod_out_to_readout = self.first_pmod_out_duration_ns + self.prep_nv_total_duration_us
+        self.pulse_width_ns = 50 * ns
+        self.pulse_width_mu = self.core.seconds_to_mu(self.pulse_width_ns)  # ttl6 pulse width
+        self.after_first_pmod_out_to_ttl5_mu = self.core.seconds_to_mu(self.first_pmod_out_duration_ns 
+                                                                       + self.delay_to_align_ttl5_to_readout_window_ns
+                                                                       + self.prep_nv_total_duration_us
+                                                                       - self.qick_adc_readout_to_pmod_out_delay_ns)
+        self.tot_time_after_pmod_out_to_readout = (self.first_pmod_out_duration_ns 
+                                                   + self.delay_to_align_ttl5_to_readout_window_ns
+                                                   - self.pulse_width_ns
+                                                   + self.prep_nv_total_duration_us
+                                                   - self.qick_adc_readout_to_pmod_out_delay_ns)
         self.tot_time_after_pmod_out_to_readout_mu = self.core.seconds_to_mu(self.tot_time_after_pmod_out_to_readout)
         self.qick_processing_time_after_readout_us = 5 * us
         self.qick_readout_integration_time_us = 1 * us
@@ -134,7 +144,6 @@ class ARQICK_DoPulses_Red_CPMG_Mbi:
         self.t_buffer_mu = self.core.seconds_to_mu(self.t_buffer_us)  # 5 us buffer min, changes depending on sequence
         self.after_artiq_recieve_trigger_delay_ns = self.t_buffer_us - self.inherent_artiq_ttl6_delay_ns
         self.after_artiq_recieve_trigger_delay_mu = self.core.seconds_to_mu(self.after_artiq_recieve_trigger_delay_ns)
-        self.pulse_width_mu = self.core.seconds_to_mu(50 * ns)  # ttl6 pulse width
         self.green_init_duration_mu = self.core.seconds_to_mu(self.green_init_duration)
         self.laser1_pulse_width_correction = 172 * ns
         self.laser2_pulse_width_correction = 108 * ns
@@ -148,7 +157,7 @@ class ARQICK_DoPulses_Red_CPMG_Mbi:
         self.wait_time_mu = self.core.seconds_to_mu(self.wait_time)
         self.wait_time_laser1_mu = self.core.seconds_to_mu(self.wait_time - self.laser1_pulse_width_correction)
         self.wait_time_laser2_mu = self.core.seconds_to_mu(self.wait_time - self.laser2_pulse_width_correction)
-
+    
         self.tau_list = []  # to set the dataset with the right taus
         self.tau_list2 = []  # to use for the actual delays to concatenate delays in artiq sequence
         self.data_size = len(self.tau_list)
@@ -160,32 +169,24 @@ class ARQICK_DoPulses_Red_CPMG_Mbi:
         self.set_dataset("off_repeats_per_cycle", [], broadcast=False)
         self.set_dataset("total_time_per_cycle", [], broadcast=False)  # total time for repeats per cycle
         
-
     def run_config(self):
         self.initialize()
 
-        self.tau_list = np.linspace(self.mw_duration_low_tdds, self.mw_duration_high_tdds, self.mw_duration_step_tdds) * self.qick_tdds_ns
-        self.data_size = len(self.tau_list)
-        self.tau_list2 = np.linspace(self.mw_duration_low_tdds, self.mw_duration_high_tdds, self.mw_duration_step_tdds) * self.qick_tdds_ns
-        self.tau_list2 = self.tau_list2 + self.after_red_op_to_mw_buffer + self.after_mw_to_spin_readout_buffer
-
         if self.scaling_mode == "linear":
-            config.add_unitless_linear_sweep("delay_tdds", self.tau_low_tdds, self.tau_high_tdds, delta = self.tau_step_tdds)
-            self.tau_list = np.linspace(config.delay_tdds_start, config.delay_tdds_end, config.nsweep_points) * self.qick_tdds_ns
-            self.tau_list2 = np.linspace(config.delay_tdds_start, config.delay_tdds_end, config.nsweep_points) * self.qick_tdds_ns
+            self.tau_list = np.linspace(self.tau_low_tdds, self.tau_high_tdds, self.tau_step_tdds) * self.qick_tdds_ns
+            self.tau_list2 = np.linspace(self.tau_low_tdds, self.tau_high_tdds, self.tau_step_tdds) * self.qick_tdds_ns
         else:
-            config.add_unitless_exponential_sweep("delay_tdds", self.tau_low_tdds, self.tau_high_tdds, self.scaling_factor)
-            self.tau_list = qd.int_exp_scale(config.delay_tdds_start, config.delay_tdds_end, self.scaling_factor) * self.qick_tdds_ns
-            self.tau_list2 = qd.int_exp_scale(config.delay_tdds_start, config.delay_tdds_end, self.scaling_factor) * self.qick_tdds_ns
+            self.tau_list = np.linspace(self.tau_low_tdds, self.tau_high_tdds, self.tau_step_tdds) * self.qick_tdds_ns
+            self.tau_list2 = np.linspace(self.tau_low_tdds, self.tau_high_tdds, self.tau_step_tdds) * self.qick_tdds_ns
+        self.data_size = len(self.tau_list)
         self.tau_list2 = self.tau_list2*2*self.n_cpmg + self.after_red_op_to_mw_buffer + self.after_mw_to_spin_readout_buffer + self.pi2_duration_tdds*self.qick_tdds_ns
-
 
         # self.pulse_qick_mbi(self.default_config, freq=self.freq_resonant, full_sweep=True)
         self.set_dataset("tau", self.tau_list)
         self.temp_data_sr = [0] * self.data_size  # for spin readout
         self.temp_data_cr = [0] * self.data_size  # for charge readout
         self.temp_data_repeats = [0] * self.data_size  # for tracking repeats per cycle
-        self.random_counts = [6, 4, 5, 4, 10, 1, 1, 1, 1, 4]
+        self.random_counts = [6, 5, 6, 4, 2, 10, 5, 3, 11, 4]
         print(self.tau_list)
         print(self.tau_list2)
         print(self.random_counts)
@@ -312,10 +313,12 @@ class ARQICK_DoPulses_Red_CPMG_Mbi:
     @kernel
     def pulse_artiq(self, index, start):
         if start:
-            self.ttl6.pulse_mu(self.pulse_width_mu)                 # start the qick | 50 ns            
-            delay_mu(self.after_first_pmod_out_to_ttl5_mu)          # 410ns  + prep_nv duration (5 + 4 + 12 + read_to_red1)
-            delay_mu(self.delay_after_ttl6_to_first_pmod_out_mu)    # 1 us THERE IS A 1.34US DELAY from ttl6 to pmodout
+            self.ttl6.pulse_mu(self.pulse_width_mu)                 # start the qick | 50 ns  
+            delay_mu(self.delay_after_ttl6_to_first_pmod_out_mu)    # 1.34us = delay from ttl6 to pmodout          
+            delay_mu(self.after_first_pmod_out_to_ttl5_mu)          # 21.425us = first_pmod_out_dur(300ns) + prep_nv(21.5us) - 410ns  + 1.34 = 22.76us
         else:
+            # self.first_pmod_out_duration_ns + self.delay_to_align_ttl5_to_readout_window_ns - 
+            # self.pulse_width_ns + self.prep_nv_total_duration_us- self.qick_adc_readout_to_pmod_out_delay_ns
             delay_mu(self.tot_time_after_pmod_out_to_readout_mu)    # first_pmod_out_duration_ns (1us) + prep_nv_duration
 
         cursor = now_mu()

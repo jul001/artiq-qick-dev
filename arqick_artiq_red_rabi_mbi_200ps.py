@@ -8,7 +8,7 @@ class ARQICK_red_rabi_mbi_200ps(EnvExperiment, ARQICK_DoPulses_Red_Mbi):
     def build(self):
         self.setattr_argument("mw_duration_low_tdds", NumberValue(500, precision=0, step=1))
         self.setattr_argument("mw_duration_high_tdds", NumberValue(1000, precision=0, step=1))
-        self.setattr_argument("mw_duration_step_tdds", NumberValue(100, precision=0, step=1))
+        self.setattr_argument("mw_duration_step_tdds", NumberValue(10, precision=0, step=1))
         self.build_config()
 
     def prepare(self):

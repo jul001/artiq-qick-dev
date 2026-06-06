@@ -56,8 +56,8 @@ class ARQICK_DoPulses_Red_Mbi:
         self.setattr_argument("freq_resonant", NumberValue(300, precision=3, step=1))
         self.setattr_argument("freq_off_resonant", NumberValue(200, precision=3, step=1))
         self.setattr_argument('mw_gain', NumberValue(8000, precision=0, min=0, max=31000, step=1))
-        self.setattr_argument("a1_optical_pump", NumberValue(3 * us, precision=2, unit="us", step=1))
-        self.setattr_argument("ex_spin_readout", NumberValue(5 * us, precision=2, unit="us", step=1))
+        self.setattr_argument("a1_optical_pump", NumberValue(5 * us, precision=2, unit="us", step=1))
+        self.setattr_argument("ex_spin_readout", NumberValue(10 * us, precision=2, unit="us", step=1))
         self.setattr_argument("charge_readout", NumberValue(4 * us, precision=2, unit="us", step=1))
         self.setattr_argument("wait_time", NumberValue(500 * ns, precision=0, step=1, unit="ns"))
 
@@ -76,8 +76,7 @@ class ARQICK_DoPulses_Red_Mbi:
         self.qick_tdds_ns = self.qick_tproc_clock_ns / 16  # tdds has 16x resolution of tproc clock
         self.inherent_qick_delay_ns = 209.27 * ns  # inherent delay for mw pulse of qick
         self.inherent_artiq_ttl6_delay_ns = 188 * ns
-        self.inherent_artiq_ttl6_delay_mu = self.core.seconds_to_mu(
-            self.inherent_artiq_ttl6_delay_ns)  # inherent delay for ttl6 pulse of artiq
+        self.inherent_artiq_ttl6_delay_mu = self.core.seconds_to_mu(self.inherent_artiq_ttl6_delay_ns)  # inherent delay for ttl6 pulse of artiq
         self.inherent_artiq_ttl2_gate_rising_delay_ns = 77 * ns
         if Fineres:
         #     if self.mw_gain > 31000:
@@ -118,13 +117,15 @@ class ARQICK_DoPulses_Red_Mbi:
 
         self.inherent_artiq_ttl2_to_ttl5_delay_ns = 1 * ns  # 140 ns works
         self.inherent_artiq_ttl2_to_ttl5_delay_mu = self.core.seconds_to_mu(self.inherent_artiq_ttl2_to_ttl5_delay_ns)
-        self.qick_adc_readout_to_pmod_out_delay_ns = 410 * ns
-        self.delay_after_ttl6_to_first_pmod_out_us = 1 * us  #1 * us
+        self.first_pmod_out_duration_ns = 300 * ns
+        self.qick_adc_readout_to_pmod_out_delay_ns = 410 * ns     # 410 * ns
+        self.delay_after_ttl6_to_first_pmod_out_us = 1.34 * us  # 1 * us
         self.delay_after_ttl6_to_first_pmod_out_mu = self.core.seconds_to_mu(self.delay_after_ttl6_to_first_pmod_out_us)
         self.prep_nv_total_duration_us = self.read_to_red1 + self.green_init_duration + self.charge_readout + self.delay_after_prep_nv
-        self.after_first_pmod_out_to_ttl5_mu = self.core.seconds_to_mu(self.qick_adc_readout_to_pmod_out_delay_ns + self.prep_nv_total_duration_us)
-        self.first_pmod_out_duration_ns = 1 * ns
-        self.tot_time_after_pmod_out_to_readout = self.first_pmod_out_duration_ns + self.prep_nv_total_duration_us
+        self.after_first_pmod_out_to_ttl5_mu = self.core.seconds_to_mu(self.first_pmod_out_duration_ns 
+                                                                       + self.prep_nv_total_duration_us 
+                                                                       - self.qick_adc_readout_to_pmod_out_delay_ns)
+        self.tot_time_after_pmod_out_to_readout = self.first_pmod_out_duration_ns + self.prep_nv_total_duration_us - self.qick_adc_readout_to_pmod_out_delay_ns
         self.tot_time_after_pmod_out_to_readout_mu = self.core.seconds_to_mu(self.tot_time_after_pmod_out_to_readout)
         self.qick_processing_time_after_readout_us = 5 * us
         self.qick_readout_integration_time_us = 1 * us
@@ -161,7 +162,6 @@ class ARQICK_DoPulses_Red_Mbi:
         self.set_dataset("off_repeats_per_cycle", [], broadcast=False)
         self.set_dataset("total_time_per_cycle", [], broadcast=False)  # total time for repeats per cycle
         
-
     def run_config(self):
         self.initialize()
 
@@ -175,7 +175,7 @@ class ARQICK_DoPulses_Red_Mbi:
         self.temp_data_sr = [0] * self.data_size  # for spin readout
         self.temp_data_cr = [0] * self.data_size  # for charge readout
         self.temp_data_repeats = [0] * self.data_size  # for tracking repeats per cycle
-        self.random_counts = [6, 4, 5, 4, 10, 1, 1, 1, 1, 4]
+        self.random_counts = [6, 4, 5, 4, 10, 1, 1, 1, 1, 4, 6, 4, 5, 4, 10, 1, 1, 1, 1, 4]
         print(self.tau_list)
         print(self.tau_list2)
         print(self.random_counts)
